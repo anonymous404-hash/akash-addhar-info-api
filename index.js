@@ -3,7 +3,7 @@ const fetch = require("node-fetch");
 const app = express();
 
 // JSON database URL
-const JSON_URL = "https://github.com/anonymous404-hash/akash-addhar-info-api/releases/download/v1.0/database1.json";
+const JSON_URL = "https://github.com/anonymous404-hash/akash-addhar-info-api/releases/download/v1.0/database2.json";
 
 // Middleware
 app.use(express.json());
