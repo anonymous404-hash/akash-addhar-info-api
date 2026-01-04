@@ -1,51 +1,55 @@
-export const config = {
-  runtime: "edge"
-};
+const express = require("express");
+const fetch = require("node-fetch");
+const app = express();
 
-const JSON_URL =
-  "https://github.com/anonymous404-hash/akash-addhar-info-api/releases/download/v1.0/database2.json";
+const JSON_URL = "https://github.com/anonymous404-hash/Addharinfoapi/releases/download/v1.0/database.json";
 
-export default async function handler(req) {
-  const { searchParams } = new URL(req.url);
-  const aadharNumber = searchParams.get("aadharNumber");
+app.get("/", (req, res) => {
+  res.json({ 
+    status: true, 
+    developer: "AKASHHACKER",
+    message: "API Working 🎉" 
+  });
+});
+
+app.get("/search", async (req, res) => {
+  const aadharNumber = req.query.aadharNumber; // /search?aadharNumber=XXXX
 
   if (!aadharNumber) {
-    return new Response(JSON.stringify({
+    return res.json({
       success: false,
       developer: "AKASHHACKER",
       message: "Please provide aadharNumber"
-    }), { status: 400 });
+    });
   }
 
   try {
-    const res = await fetch(JSON_URL);
-    if (!res.ok) throw new Error("Fetch failed");
+    const response = await fetch(JSON_URL);
+    const data = await response.json();
 
-    const data = await res.json();
-
-    const result = data.find(
-      i => String(i.aadharNumber) === String(aadharNumber)
-    );
+    const result = data.find(item => item.aadharNumber == aadharNumber);
 
     if (!result) {
-      return new Response(JSON.stringify({
+      return res.json({
         success: false,
         developer: "AKASHHACKER",
         message: "No records found"
-      }));
+      });
     }
 
-    return new Response(JSON.stringify({
+    return res.json({
       success: true,
       developer: "AKASHHACKER",
       data: result
-    }));
+    });
 
-  } catch (e) {
-    return new Response(JSON.stringify({
+  } catch (err) {
+    return res.json({
       success: false,
       developer: "AKASHHACKER",
       message: "Database fetch problem"
-    }), { status: 500 });
+    });
   }
-}
+});
+
+app.listen(3000, () => console.log("Server Running"));
