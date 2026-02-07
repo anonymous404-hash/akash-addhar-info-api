@@ -1,93 +1,91 @@
 const express = require("express");
-const fs = require("fs");
-const path = require("path");
-
+const axios = require("axios"); // External link se data fetch karne ke liye
 const app = express();
-const PORT = 3000;
-const DB_FILE = "database.json"; 
+const PORT = process.env.PORT || 3000;
+
 const DEVELOPER = "@AKASHHACKER";
+// Yahan apna Release Database Direct Download Link daalein
+const DB_URL = "YOUR_DIRECT_RELEASE_LINK_HERE"; 
 
 const KEYS_DB = {
   "AKASH_VIP": { expiry: "2026-12-31", status: "Premium" }
 };
 
-app.get("/search", (req, res) => {
+app.get("/search", async (req, res) => {
   const { phone, addhar, key } = req.query;
 
   // 1. Key Check
   if (!key || !KEYS_DB[key]) return res.status(401).json({ success: false, message: "Invalid Key!", developer: DEVELOPER });
 
-  // 2. Expiry Calculation Logic
+  // 2. Expiry Logic
   const today = new Date();
   const expiryDate = new Date(KEYS_DB[key].expiry);
   const timeDiff = expiryDate - today;
-  const daysLeft = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)); // Days convert karne ke liye
+  const daysLeft = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
 
   if (today > expiryDate) {
-    return res.status(403).json({ 
-      success: false, 
-      message: "Key Expired!", 
-      expiry_date: KEYS_DB[key].expiry,
-      developer: DEVELOPER 
-    });
+    return res.status(403).json({ success: false, message: "Key Expired!", developer: DEVELOPER });
   }
 
   if (!phone && !addhar) return res.status(400).json({ success: false, message: "Phone or Aadhar required" });
 
-  const filePath = path.join(__dirname, DB_FILE);
-  const stream = fs.createReadStream(filePath, { encoding: "utf8", highWaterMark: 128 * 1024 }); 
-  let buffer = "";
-  let isFound = false;
+  try {
+    // External URL se data stream karna
+    const response = await axios({
+      method: 'get',
+      url: DB_URL,
+      responseType: 'stream'
+    });
 
-  stream.on("data", (chunk) => {
-    if (isFound) return;
-    buffer += chunk;
+    let buffer = "";
+    let isFound = false;
 
-    let idx;
-    while ((idx = buffer.indexOf("},")) !== -1) {
-      let piece = buffer.slice(0, idx + 1).trim();
-      buffer = buffer.slice(idx + 2);
+    response.data.on("data", (chunk) => {
+      if (isFound) return;
+      buffer += chunk.toString();
 
-      if (piece.startsWith("[")) piece = piece.slice(1);
+      let idx;
+      while ((idx = buffer.indexOf("},")) !== -1) {
+        let piece = buffer.slice(0, idx + 1).trim();
+        buffer = buffer.slice(idx + 2);
 
-      const matchPhone = phone && (
-        piece.includes(`"Phone Number": ${phone}.0`) || 
-        piece.includes(`"Phone Number": ${phone}`)
-      );
-      
-      const matchAadhar = addhar && (
-        piece.includes(`"Aadhaar Number": ${addhar}.0`) || 
-        piece.includes(`"Aadhaar Number": ${addhar}`)
-      );
+        if (piece.startsWith("[")) piece = piece.slice(1);
 
-      if (matchPhone || matchAadhar) {
-        isFound = true;
-        stream.destroy();
-        try {
-          let cleanPiece = piece;
-          if (cleanPiece.endsWith("]")) cleanPiece = cleanPiece.slice(0, -1);
+        const matchPhone = phone && (piece.includes(`"Phone Number": ${phone}.0`) || piece.includes(`"Phone Number": ${phone}`));
+        const matchAadhar = addhar && (piece.includes(`"Aadhaar Number": ${addhar}.0`) || piece.includes(`"Aadhaar Number": ${addhar}`));
+
+        if (matchPhone || matchAadhar) {
+          isFound = true;
+          // Connection band kar dena search milne par
+          response.data.destroy(); 
           
-          return res.json({
-            success: true,
-            developer: DEVELOPER,
-            key_status: KEYS_DB[key].status,
-            expiry_date: KEYS_DB[key].expiry, // Expiry date dikhayega
-            days_left: daysLeft > 0 ? `${daysLeft} days` : "Last day today", // Kitne din bache hain
-            data: JSON.parse(cleanPiece)
-          });
-        } catch (e) {
-          return res.status(500).json({ success: false, message: "JSON Data Error" });
+          try {
+            let cleanPiece = piece;
+            if (cleanPiece.endsWith("]")) cleanPiece = cleanPiece.slice(0, -1);
+            
+            return res.json({
+              success: true,
+              developer: DEVELOPER,
+              key_status: KEYS_DB[key].status,
+              days_left: daysLeft > 0 ? `${daysLeft} days` : "Last day",
+              data: JSON.parse(cleanPiece)
+            });
+          } catch (e) {
+            return res.status(500).json({ success: false, message: "JSON Parsing Error" });
+          }
         }
       }
-    }
-    if (buffer.length > 1000000) buffer = buffer.slice(-200000);
-  });
+    });
 
-  stream.on("end", () => {
-    if (!isFound) res.status(404).json({ success: false, message: "No record found", developer: DEVELOPER });
-  });
+    response.data.on("end", () => {
+      if (!isFound) res.status(404).json({ success: false, message: "No record found", developer: DEVELOPER });
+    });
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Database link not working or unreachable" });
+  }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 API LIVE | Dev: ${DEVELOPER} | Port: ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`🚀 API LIVE | Port: ${PORT}`);
 });
